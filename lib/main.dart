@@ -12,6 +12,7 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -24,6 +25,7 @@ class MyApp extends StatelessWidget {
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
+
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
@@ -36,6 +38,22 @@ class _MapScreenState extends State<MapScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _autocompleteResults = [];
   MapType _currentMapType = MapType.normal;
+  String? _distanceText = '';
+  String? _timeText = '';
+  
+  // List of past search history
+  List<String> _searchHistory = [];
+
+  // List of transportation modes (with corresponding speeds)
+  final List<Map<String, dynamic>> _transportModes = [
+    {'label': 'Đi bộ', 'speed': 5},  // 5 km/h
+    {'label': 'Xe đạp', 'speed': 15},  // 15 km/h
+    {'label': 'Xe máy', 'speed': 40},  // 40 km/h
+    {'label': 'Ô tô', 'speed': 50},  // 50 km/h
+  ];
+  
+  String _selectedTransportMode = 'Xe máy';  // Default to "Xe máy"
+  int _speed = 30;  // Default speed is 30 km/h for xe máy
 
   @override
   void initState() {
@@ -99,6 +117,7 @@ class _MapScreenState extends State<MapScreen> {
     _searchController.clear();
     setState(() {
       _autocompleteResults = []; // Xóa kết quả gợi ý sau khi chọn
+      _searchHistory.add(result['display_name']); // Thêm vào lịch sử tìm kiếm
     });
   }
 
@@ -118,6 +137,22 @@ class _MapScreenState extends State<MapScreen> {
         points.add(LatLng(coord[1], coord[0]));
       }
 
+      double distance = route['legs'][0]['distance'] / 1000; // km
+      double duration = route['legs'][0]['duration'] / 60; // minutes
+
+      // Calculate adjusted time based on the selected transport speed
+      double adjustedDuration = distance / _speed * 60;  // minutes
+
+      String formattedDistance = distance < 1
+          ? '${(distance * 1000).toStringAsFixed(0)} m'
+          : '${distance.toStringAsFixed(2)} km';
+
+      int hours = adjustedDuration ~/ 60;
+      int minutes = adjustedDuration.round() % 60;
+      String formattedTime = hours > 0
+          ? '${hours} giờ ${minutes} phút'
+          : '${minutes} phút';
+
       setState(() {
         _polyline = Polyline(
           polylineId: const PolylineId('route'),
@@ -125,6 +160,8 @@ class _MapScreenState extends State<MapScreen> {
           color: Colors.blue,
           width: 5,
         );
+        _distanceText = formattedDistance;
+        _timeText = formattedTime;
       });
     }
   }
@@ -136,6 +173,8 @@ class _MapScreenState extends State<MapScreen> {
           : MapType.satellite;
     });
   }
+  bool isSearchHistoryVisible = true;
+
 
   @override
   Widget build(BuildContext context) {
@@ -174,17 +213,20 @@ class _MapScreenState extends State<MapScreen> {
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.search),
                         onPressed: () {
-                          // Gọi _searchAddress khi nhấn vào nút tìm kiếm
                           _searchAddress(_searchController.text);
+                          setState(() {
+                            isSearchHistoryVisible = false;
+                          });
                         },
                       ),
                     ),
                     onChanged: _searchAddress,
                   ),
                 ),
+                
                 Positioned(
-                  top: 20,
-                  right: 20,
+                  top: 60,
+                  right: 10,
                   child: FloatingActionButton(
                     heroTag: 'directionsBtn',
                     onPressed: () {
@@ -192,6 +234,9 @@ class _MapScreenState extends State<MapScreen> {
                         final start = _currentPosition!;
                         final end = _markers.first.position;
                         _getDirections(start, end);
+                        setState(() {
+                          isSearchHistoryVisible = false;
+                        });
                       }
                     },
                     child: const Icon(Icons.directions),
@@ -206,6 +251,35 @@ class _MapScreenState extends State<MapScreen> {
                     onPressed: _toggleMapType,
                     child: const Icon(Icons.satellite),
                     tooltip: 'Chuyển chế độ bản đồ',
+                  ),
+                ),
+                // Dropdown for transportation mode
+                Positioned(
+                  bottom: 30,
+                  left: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(126, 255, 255, 255),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _selectedTransportMode,
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedTransportMode = newValue!;
+                          _speed = _transportModes
+                              .firstWhere(
+                                  (mode) => mode['label'] == newValue)['speed'];
+                        });
+                      },
+                      items: _transportModes.map((mode) {
+                        return DropdownMenuItem<String>(
+                          value: mode['label'],
+                          child: Text(mode['label']),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
                 // Gợi ý địa chỉ tự động
@@ -226,6 +300,52 @@ class _MapScreenState extends State<MapScreen> {
                             onTap: () => _onAutocompleteItemSelected(result),
                           );
                         },
+                      ),
+                    ),
+                  ),
+                // Hiển thị lịch sử tìm kiếm
+                if (_searchHistory.isNotEmpty && isSearchHistoryVisible )
+                  Positioned(
+                    top: 150,
+                    left: 20,
+                    right: 20,
+                    child: Container(
+                      color: Colors.white,
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _searchHistory.length,
+                        itemBuilder: (context, index) {
+                          return ListTile(
+                            title: Text(_searchHistory[index]),
+                            onTap: () {
+                              _searchController.text = _searchHistory[index];
+                              _searchAddress(_searchHistory[index]);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                // Hiển thị thông tin khoảng cách và thời gian
+                if (_distanceText != null && _timeText != null)
+                  Positioned(
+                    bottom: 80,
+                    left: 6,
+                    child: Container(
+                      color: const Color.fromARGB(137, 255, 255, 255),
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Khoảng cách: $_distanceText',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          Text(
+                            'Thời gian: $_timeText',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ],
                       ),
                     ),
                   ),

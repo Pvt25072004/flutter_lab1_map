@@ -35,6 +35,7 @@ dependencies:
   flutter_polyline_points: ^1.0.0
   http: ^0.13.6
   diacritic: ^0.1.0
+  shared_preferences: ^2.2.0
   # flutter_typeahead: ^4.0.0
   # flutter_keyboard_visibility: 5.0.3
   # google_maps_webservice: ^0.0.20-nullsafety.5
